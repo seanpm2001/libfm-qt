@@ -81,6 +81,11 @@ PathBar::PathBar(QWidget* parent):
     buttonsLayout_->setSpacing(0);
     buttonsLayout_->setSizeConstraint(QLayout::SetFixedSize); // required when added to scroll area according to QScrollArea doc.
     scrollArea_->setWidget(buttonsWidget_); // make the buttons widget scrollable if the path is too long
+
+    // for wheel scrolling over buttons (= visible widgets)
+    buttonsWidget_->installEventFilter (this);
+    scrollToStart_->installEventFilter (this);
+    scrollToEnd_->installEventFilter (this);
 }
 
 void PathBar::resizeEvent(QResizeEvent* event) {
@@ -91,30 +96,13 @@ void PathBar::resizeEvent(QResizeEvent* event) {
     }
 }
 
-void PathBar::wheelEvent(QWheelEvent* event) {
-    QWidget::wheelEvent(event);
-    QAbstractSlider::SliderAction action = QAbstractSlider::SliderNoAction;
-    int vDelta = event->angleDelta().y();
-    if(vDelta > 0) {
-        if(scrollToStart_->isEnabled()) {
-            action = QAbstractSlider::SliderSingleStepSub;
-        }
-    }
-    else if(vDelta < 0) {
-        if(scrollToEnd_->isEnabled()) {
-            action = QAbstractSlider::SliderSingleStepAdd;
-        }
-    }
-    scrollArea_->horizontalScrollBar()->triggerAction(action);
-}
-
 void PathBar::mousePressEvent(QMouseEvent* event) {
     QWidget::mousePressEvent(event);
     if(event->button() == Qt::LeftButton) {
         openEditor();
     }
     else if(event->button() == Qt::MiddleButton) {
-        PathButton* btn = qobject_cast<PathButton*>(childAt(event->x(), event->y()));
+        PathButton* btn = qobject_cast<PathButton*>(childAt(event->position().toPoint()));
         if(btn != nullptr) {
             scrollArea_->ensureWidgetVisible(btn,
                                              1); // a harmless compensation for a miscalculation in Qt
@@ -134,6 +122,28 @@ void PathBar::contextMenuEvent(QContextMenuEvent* event) {
     connect(action, &QAction::triggered, this, &PathBar::copyPath);
 
     menu->popup(mapToGlobal(event->pos()));
+}
+
+bool PathBar::eventFilter(QObject* watched, QEvent* event) {
+    if(event->type() == QEvent::Wheel
+       && (watched == buttonsWidget_ || watched == scrollToStart_ || watched == scrollToEnd_)) {
+        QWheelEvent* we = static_cast<QWheelEvent*>(event);
+        QAbstractSlider::SliderAction action = QAbstractSlider::SliderNoAction;
+        int vDelta = we->angleDelta().y();
+        if(vDelta > 0) {
+            if(scrollToStart_->isEnabled()) {
+                action = QAbstractSlider::SliderSingleStepSub;
+            }
+        }
+        else if(vDelta < 0) {
+            if(scrollToEnd_->isEnabled()) {
+                action = QAbstractSlider::SliderSingleStepAdd;
+            }
+        }
+        scrollArea_->horizontalScrollBar()->triggerAction(action);
+        return true;
+    }
+    return QWidget::eventFilter(watched, event);
 }
 
 void PathBar::updateScrollButtonVisibility() {
